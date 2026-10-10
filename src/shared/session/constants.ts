@@ -26,3 +26,13 @@ export const MESSAGE_EVENTS = {
     UPDATED: "message.updated",
     PART_UPDATED: "message.part.updated",
 } as const;
+
+/**
+ * Agent Event Types
+ *
+ * Published whenever the host's agent registry changes — most importantly when
+ * it merges the user's `agent:` config, which happens after plugin setup.
+ */
+export const AGENT_EVENTS = {
+    UPDATED: "agent.updated",
+} as const;

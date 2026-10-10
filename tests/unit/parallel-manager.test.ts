@@ -29,11 +29,12 @@ import { TaskStore } from "../../src/core/agents/task-store";
 import { ConcurrencyController } from "../../src/core/agents/concurrency";
 import { EventHandler } from "../../src/core/agents/manager/event-handler";
 import { TaskPoller } from "../../src/core/agents/manager/task-poller";
+import { AgentRegistry } from "../../src/core/agents/agent-registry";
 import {
     isCancellableTaskStatus,
     ParallelAgentManager,
 } from "../../src/core/agents/manager";
-import { AGENT_NAMES, TASK_STATUS, type ParallelTask } from "../../src/shared";
+import { AGENT_EVENTS, AGENT_NAMES, TASK_STATUS, type ParallelTask } from "../../src/shared";
 
 // Create mock task for testing
 function createMockTask(overrides: Partial<ParallelTask> = {}): ParallelTask {
@@ -573,6 +574,30 @@ describe("ParallelAgentManager Features", () => {
             expect(mockClient.session.prompt).toHaveBeenCalledWith(expect.objectContaining({
                 path: { id: task.parentSessionID },
             }));
+        });
+
+        it("re-lists host agents when the host reports an agent change", async () => {
+            // The facade fixture's manager is already built; this needs its own
+            // client, because the registry keeps the one it was first given.
+            ParallelAgentManager._resetForTesting();
+            AgentRegistry._resetForTesting();
+            const hostAgents = vi.fn()
+                .mockResolvedValueOnce({ data: [{ id: "build", system: "HOST BUILD SYSTEM" }] })
+                .mockResolvedValue({ data: [{ id: "build" }, { id: "subagent_reverse", system: "HOST SYSTEM" }] });
+            const agentManager = ParallelAgentManager.getInstance(
+                { ...mockClient, app: { agents: hostAgents } },
+                "/tmp/pam-host-agents",
+            );
+
+            expect(AgentRegistry.getInstance().isHostAgent("subagent_reverse")).toBe(false);
+
+            agentManager.handleEvent({ type: AGENT_EVENTS.UPDATED });
+
+            await vi.waitFor(() => {
+                expect(AgentRegistry.getInstance().isHostAgent("subagent_reverse")).toBe(true);
+            });
+
+            await agentManager.shutdown();
         });
 
         it("manages tasks, concurrency, results, and events", async () => {

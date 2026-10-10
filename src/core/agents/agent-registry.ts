@@ -48,6 +48,10 @@ export class AgentRegistry {
     private hostAgents: Set<string> = new Set();
     private directory: string = "";
     private loadPromise: Promise<void> = Promise.resolve();
+    /** Kept so a later refresh can re-list without the caller handing the client back. */
+    private hostAgentClient: HostAgentClient | undefined;
+    /** In-flight refresh, so concurrent misses share one list instead of stampeding it. */
+    private hostAgentRefresh: Promise<void> | undefined;
 
     private constructor() {
         // Load built-in agents
@@ -78,8 +82,26 @@ export class AgentRegistry {
      * knows (a built-in or a `.opencode/agents.json` role) keeps its routing.
      */
     public loadHostAgents(client: HostAgentClient): Promise<void> {
+        this.hostAgentClient = client;
         this.loadPromise = this.loadPromise.then(() => this.registerHostAgents(client));
         return this.loadPromise;
+    }
+
+    /**
+     * Re-list the host's agents. The host merges the user's `agent:` config
+     * after plugin setup, so the list taken then can miss agents that already
+     * exist by the time delegation runs. Concurrent callers share the in-flight
+     * list rather than each starting their own.
+     */
+    public refreshHostAgents(): Promise<void> {
+        const client = this.hostAgentClient;
+        if (!client) return Promise.resolve();
+        this.hostAgentRefresh ??= this.loadPromise
+            .then(() => this.registerHostAgents(client))
+            .finally(() => {
+                this.hostAgentRefresh = undefined;
+            });
+        return this.hostAgentRefresh;
     }
 
     public async ready(): Promise<void> {
@@ -92,6 +114,21 @@ export class AgentRegistry {
      * definitions must never be re-injected into a prompt.
      */
     public isHostAgent(name: string): boolean {
+        return this.hostAgents.has(name);
+    }
+
+    /**
+     * {@link isHostAgent} for a name about to be delegated, re-listing once when
+     * the plugin does not know it at all: the host may have added it after the
+     * startup list. A name the plugin already holds — a built-in or a
+     * `.opencode/agents.json` role — is settled without a round trip, because
+     * {@link registerHostAgents} never takes a name the plugin already has, so
+     * no refresh can turn it into a host agent.
+     */
+    public async resolveHostAgent(name: string): Promise<boolean> {
+        if (this.hostAgents.has(name)) return true;
+        if (this.agents.has(name)) return false;
+        await this.refreshHostAgents();
         return this.hostAgents.has(name);
     }
 
@@ -143,7 +180,19 @@ export class AgentRegistry {
 
     private async registerHostAgents(client: HostAgentClient): Promise<void> {
         const listed = await readHostAgents(client);
+        // An empty list means "no answer", not "no agents": the read is
+        // best-effort, and dropping every host route on one failed call would
+        // coerce all delegation to Commander.
+        if (listed.length === 0) return;
+
         const registered: string[] = [];
+
+        // Replace the previous contribution so a host agent that changed or
+        // disappeared stops routing from a stale copy. Only names this method
+        // added are held in `hostAgents`, so this removes exactly its own
+        // definitions and never a built-in or an agents.json role.
+        for (const name of this.hostAgents) this.agents.delete(name);
+        this.hostAgents.clear();
 
         for (const info of listed) {
             const name = typeof info.id === "string" ? info.id : "";

@@ -11,6 +11,7 @@
 
 import type { PluginInput } from "@opencode-ai/plugin";
 import {
+    AGENT_EVENTS,
     TASK_CANCELLED_BY_USER,
     TASK_STATUS,
     type LaunchInput,
@@ -287,6 +288,14 @@ export class ParallelAgentManager {
 
     handleEvent(event: { type: string; properties?: { sessionID?: string; info?: { id?: string }; error?: unknown } }): void {
         this.eventHandler.handle(event);
+        if (event.type === AGENT_EVENTS.UPDATED) {
+            // The host adds the user's `agent:` config after plugin setup, so the
+            // startup list can be missing agents. Refresh when it says so; the
+            // registry coalesces overlapping refreshes, so a burst is one list.
+            void AgentRegistry.getInstance().refreshHostAgents().catch(error => {
+                log(`Host agent refresh failed: ${error}`);
+            });
+        }
         if (event.type === "session.idle" && event.properties?.sessionID) {
             void this.cleaner.notifyParentIfAllComplete(event.properties.sessionID).catch(error => log("Parent notice retry failed", error));
         }

@@ -88,6 +88,28 @@ describe("buildRoutedAgentPrompt", () => {
         }));
     });
 
+    it("re-lists the host's agents when the first list predates the host's config merge", async () => {
+        // The host merges the user's `agent:` config after plugin setup, so the
+        // list taken at setup is missing agents that exist by delegation time.
+        const hostAgent = "subagent_late_merge";
+        let listed = [{ id: "build", system: "HOST BUILD SYSTEM" }];
+        const client = {
+            app: {
+                agents: async () => ({ data: listed.map(agent => ({ ...agent })) }),
+            },
+        };
+        await AgentRegistry.getInstance().loadHostAgents(client);
+
+        listed = [...listed, { id: hostAgent, description: "Late host agent", system: "HOST SYSTEM" }];
+
+        const routed = await buildRoutedAgentPrompt(hostAgent, "Run the late agent");
+
+        expect(routed.wireAgent).toBe(hostAgent);
+        expect(routed.text).toBe("Run the late agent");
+        expect(routed.text).not.toContain("### AGENT ROLE:");
+        expect(routed.tools).not.toHaveProperty(TOOL_NAMES.DELEGATE_TASK);
+    });
+
     it("prepends relevant memory context before a compact built-in task prompt", async () => {
         MemoryManager.getInstance().add(
             MemoryLevel.PROJECT,
