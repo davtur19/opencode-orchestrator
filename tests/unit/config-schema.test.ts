@@ -4,6 +4,7 @@ import path from "node:path";
 import {
     orchestratorOptionsJsonSchema,
     OrchestratorOptionsSchema,
+    parseHostAgentRouting,
     parseMissionLoopOptions,
     parseMessageVisibility,
 } from "../../src/core/config/options-schema.js";
@@ -71,6 +72,26 @@ describe("plugin options schema (Phase G)", () => {
             expect(parseMessageVisibility({ showInjectedMessages: false })).toBe("synthetic");
             expect(parseMessageVisibility({ showInjectedMessages: true })).toBe("visible");
             expect(parseMessageVisibility({ showInjectedMessages: true, messageVisibility: "synthetic" })).toBe("synthetic");
+        });
+    });
+
+    describe("tolerant hostAgentRouting parsing", () => {
+        it("stays off when absent or unusable", () => {
+            expect(parseHostAgentRouting(undefined)).toBe(false);
+            expect(parseHostAgentRouting("true")).toBe(false);
+            expect(parseHostAgentRouting(1)).toBe(false);
+            expect(parseHostAgentRouting(null)).toBe(false);
+        });
+
+        it("honours an explicit boolean", () => {
+            expect(parseHostAgentRouting(true)).toBe(true);
+            expect(parseHostAgentRouting(false)).toBe(false);
+        });
+
+        it("is declared as an optional boolean on the options schema", () => {
+            expect(OrchestratorOptionsSchema.safeParse({}).success).toBe(true);
+            expect(OrchestratorOptionsSchema.safeParse({ hostAgentRouting: true }).success).toBe(true);
+            expect(OrchestratorOptionsSchema.safeParse({ hostAgentRouting: "yes" }).success).toBe(false);
         });
     });
 

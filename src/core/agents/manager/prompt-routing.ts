@@ -11,11 +11,12 @@ export interface RoutedAgentPrompt {
 export async function buildRoutedAgentPrompt(
   agent: string,
   prompt: string,
+  hostAgentRouting = false,
 ): Promise<RoutedAgentPrompt> {
   const agentRegistry = AgentRegistry.getInstance();
   await agentRegistry.ready();
 
-  const wireAgent = await resolveWireAgent(agent, agentRegistry);
+  const wireAgent = await resolveWireAgent(agent, agentRegistry, hostAgentRouting);
   const routedPrompt = buildRolePrompt(agent, prompt, wireAgent, agentRegistry);
   const memory = MemoryManager.getInstance().getContext(routedPrompt);
   const text = memory ? `${memory}\n\n${routedPrompt}` : routedPrompt;
@@ -33,20 +34,30 @@ function buildRolePrompt(
   wireAgent: string,
   agentRegistry: AgentRegistry,
 ): string {
+  if (wireAgent === agent) return prompt;
+  // A host agent delegated to something else runs as that agent's clone, so it
+  // must not carry the host's system prompt: the host applies it only when the
+  // agent itself runs, and injecting it would dress Commander up as a
+  // specialist. Plugin roles are unaffected — they have no host definition.
+  if (agentRegistry.isHostAgent(agent)) return prompt;
   const agentDef = agentRegistry.getAgent(agent);
   if (!agentDef) return prompt;
-  if (wireAgent === agent) return prompt;
 
   return `### AGENT ROLE: ${agentDef.id}\n${agentDef.description}\n\n${agentDef.systemPrompt}\n\n${prompt}`;
 }
 
 /**
- * A name the host runs itself routes to itself. Any other name keeps the
- * custom-role contract: an unknown or plugin-only agent rides on Commander
- * carrying its role prompt, so it never runs as a bare Commander clone.
+ * With `hostAgentRouting` on, a name the host runs itself routes to itself.
+ * Any other name keeps the custom-role contract: an unknown or plugin-only
+ * agent rides on Commander carrying its role prompt, so it never runs as a
+ * bare Commander clone.
  */
-async function resolveWireAgent(agent: string, agentRegistry: AgentRegistry): Promise<string> {
-  if (await agentRegistry.resolveHostAgent(agent)) return agent;
+async function resolveWireAgent(
+  agent: string,
+  agentRegistry: AgentRegistry,
+  hostAgentRouting: boolean,
+): Promise<string> {
+  if (hostAgentRouting && await agentRegistry.resolveHostAgent(agent)) return agent;
   const knownAgents = Object.values(AGENT_NAMES) as string[];
   return knownAgents.includes(agent) ? agent : AGENT_NAMES.COMMANDER;
 }

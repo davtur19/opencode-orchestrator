@@ -60,6 +60,12 @@ export const OrchestratorOptionsSchema = z
         messageVisibility: z.enum(["synthetic", "visible"]).optional(),
         /** Legacy boolean alias for messageVisibility: true -> visible, false -> synthetic. Ignored when messageVisibility is valid. */
         showInjectedMessages: z.boolean().optional(),
+        /**
+         * When true, a name the host registered as one of its own agents is
+         * delegated to that agent instead of falling back to Commander. Host
+         * agents stay listed either way; only the routing choice is opt-in.
+         */
+        hostAgentRouting: z.boolean().optional(),
     })
     .passthrough();
 
@@ -90,6 +96,15 @@ export function parseAgentTemperatures(value: unknown): Record<string, number> {
         const result = Temperature.safeParse(raw);
         return result.success ? [[agent, result.data]] : [];
     }));
+}
+
+/**
+ * Tolerant resolution of the `hostAgentRouting` option: only a literal `true`
+ * opts in. Absent, wrong-typed, or false keeps the plugin's own delegation
+ * surface, where an unknown name falls back to Commander.
+ */
+export function parseHostAgentRouting(value: unknown): boolean {
+    return z.boolean().catch(false).parse(value);
 }
 
 /** Tolerant parse of the `missionLoop` option block. */

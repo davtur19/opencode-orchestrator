@@ -120,6 +120,9 @@
     },
     "showInjectedMessages": {
       "type": "boolean"
+    },
+    "hostAgentRouting": {
+      "type": "boolean"
     }
   },
   "additionalProperties": {}

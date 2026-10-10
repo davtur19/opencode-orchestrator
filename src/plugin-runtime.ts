@@ -80,6 +80,7 @@ export function initializePluginRuntime(
         input.client,
         input.directory,
         optionsConfig.concurrency,
+        optionsConfig.hostAgentRouting,
     );
     taskToastManager.setConcurrencyController(parallelAgentManager.getConcurrency());
 

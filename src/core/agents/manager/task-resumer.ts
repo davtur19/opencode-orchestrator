@@ -15,13 +15,29 @@ import { isSessionBusy } from "../../session/activity.js";
 
 type OpencodeClient = PluginInput["client"];
 
+export interface TaskResumerOptions {
+    client: OpencodeClient;
+    store: TaskStore;
+    findBySession: (sessionID: string) => ParallelTask | undefined;
+    startTask: (task: ParallelTask, prompt: RoutedAgentPrompt) => void;
+    /** Opt-in: send a host agent name to that agent instead of Commander. */
+    hostAgentRouting: boolean;
+}
+
 export class TaskResumer {
-    constructor(
-        private client: OpencodeClient,
-        private store: TaskStore,
-        private findBySession: (sessionID: string) => ParallelTask | undefined,
-        private startTask: (task: ParallelTask, prompt: RoutedAgentPrompt) => void,
-    ) { }
+    private readonly client: OpencodeClient;
+    private readonly store: TaskStore;
+    private readonly findBySession: (sessionID: string) => ParallelTask | undefined;
+    private readonly startTask: (task: ParallelTask, prompt: RoutedAgentPrompt) => void;
+    private readonly hostAgentRouting: boolean;
+
+    constructor(options: TaskResumerOptions) {
+        this.client = options.client;
+        this.store = options.store;
+        this.findBySession = options.findBySession;
+        this.startTask = options.startTask;
+        this.hostAgentRouting = options.hostAgentRouting;
+    }
 
     async resume(input: ResumeInput): Promise<ParallelTask> {
         const existingTask = this.findBySession(input.sessionId);
@@ -30,7 +46,7 @@ export class TaskResumer {
         }
 
         const startedAt = existingTask.startedAt;
-        const routedPrompt = await buildRoutedAgentPrompt(existingTask.agent, input.prompt);
+        const routedPrompt = await buildRoutedAgentPrompt(existingTask.agent, input.prompt, this.hostAgentRouting);
         if (await isSessionBusy(this.client, existingTask.sessionID) || existingTask.status === TASK_STATUS.RUNNING || existingTask.status === TASK_STATUS.PENDING) {
             throw new Error(`Cannot resume session ${existingTask.sessionID}: session is still running`);
         }

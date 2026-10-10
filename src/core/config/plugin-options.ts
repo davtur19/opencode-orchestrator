@@ -4,7 +4,7 @@ import { extractConcurrencyConfig } from "../agents/concurrency-config.js";
 import {
     type MissionRuntimeOptions,
 } from "../loop/mission-runtime-options.js";
-import { parseAgentTemperatures, parseContextMaxTokens, parseMessageVisibility, parseMissionLoopOptions } from "./options-schema.js";
+import { parseAgentTemperatures, parseContextMaxTokens, parseHostAgentRouting, parseMessageVisibility, parseMissionLoopOptions } from "./options-schema.js";
 import { isRecord } from "../../shared/core/guards.js";
 import type { MessageVisibility } from "../session/injection.js";
 
@@ -17,6 +17,8 @@ interface OrchestratorPluginOptions {
     contextMaxTokens?: number;
     agentTemperatures: Record<string, number>;
     messageVisibility: MessageVisibility;
+    /** Opt-in: delegate a host agent name to that agent instead of Commander. */
+    hostAgentRouting: boolean;
 }
 
 export function parseOrchestratorPluginOptions(options?: PluginOptions): OrchestratorPluginOptions {
@@ -27,6 +29,7 @@ export function parseOrchestratorPluginOptions(options?: PluginOptions): Orchest
         contextMaxTokens: parseContextMaxTokens(source.contextMaxTokens),
         agentTemperatures: parseAgentTemperatures(source.agentTemperatures),
         messageVisibility: parseMessageVisibility(source),
+        hostAgentRouting: parseHostAgentRouting(source.hostAgentRouting),
     };
 }
 

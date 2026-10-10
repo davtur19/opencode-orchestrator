@@ -29,7 +29,7 @@ function createTaskLauncher(
     onTaskError: any,
     startPolling: any,
 ): TaskLauncher {
-    return new TaskLauncher({ client, store, concurrency, sessionRegistry, onTaskError, startPolling });
+    return new TaskLauncher({ client, store, concurrency, sessionRegistry, onTaskError, startPolling, hostAgentRouting: false });
 }
 
 function createTaskPoller(
@@ -267,8 +267,13 @@ describe("task lifecycle across execution boundaries", () => {
         await poller.completeTask(task);
         const blocker = await launch();
         await vi.advanceTimersByTimeAsync(0);
-        const resumer = new TaskResumer(client as never, store, id => store.getBySession(id),
-            (resumed, prompt) => { cleaner.cancelCleanup(resumed.id); launcher.startTask(resumed, prompt); });
+        const resumer = new TaskResumer({
+            client: client as never,
+            store,
+            findBySession: id => store.getBySession(id),
+            startTask: (resumed, prompt) => { cleaner.cancelCleanup(resumed.id); launcher.startTask(resumed, prompt); },
+            hostAgentRouting: false,
+        });
         Object.assign(manager, { resumer });
         const run = await manager.resume({ sessionId: task.sessionID, prompt: "follow up", parentSessionID: "parent" });
         expect(run.status).toBe(TASK_STATUS.PENDING);

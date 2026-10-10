@@ -600,6 +600,41 @@ describe("ParallelAgentManager Features", () => {
             await agentManager.shutdown();
         });
 
+        it("sends a launched host agent to itself only when host routing is enabled", async () => {
+            // Each mode needs its own manager: the registry keeps the client it
+            // was first given, and the routing flag is fixed at construction.
+            async function promptAgentFor(hostAgentRouting: boolean) {
+                ParallelAgentManager._resetForTesting();
+                AgentRegistry._resetForTesting();
+                const client = {
+                    ...mockClient,
+                    // A fresh prompt mock per mode: the fixture's is shared, so a
+                    // leftover call would otherwise answer the next assertion.
+                    session: {
+                        ...mockClient.session,
+                        prompt: vi.fn().mockResolvedValue({ data: {} }),
+                    },
+                    app: { agents: vi.fn().mockResolvedValue({ data: [{ id: "subagent_routing", system: "HOST SYSTEM" }] }) },
+                };
+                const routed = ParallelAgentManager.getInstance(client, "/tmp/pam-routing", undefined, hostAgentRouting);
+                try {
+                    await routed.launch({
+                        description: "Routing probe",
+                        prompt: "Run the probe",
+                        agent: "subagent_routing",
+                        parentSessionID: "parent-routing",
+                    });
+                    await vi.waitFor(() => expect(client.session.prompt).toHaveBeenCalled());
+                    return client.session.prompt.mock.calls.at(-1)?.[0]?.body;
+                } finally {
+                    await routed.shutdown();
+                }
+            }
+
+            expect((await promptAgentFor(true)).agent).toBe("subagent_routing");
+            expect((await promptAgentFor(false)).agent).toBe(AGENT_NAMES.COMMANDER);
+        });
+
         it("manages tasks, concurrency, results, and events", async () => {
             expect(manager.getAllTasks()).toEqual([]);
             expect(manager.getRunningTasks()).toEqual([]);

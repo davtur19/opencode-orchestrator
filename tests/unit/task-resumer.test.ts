@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TaskResumer } from "../../src/core/agents/manager/task-resumer";
+import { TaskResumer, type TaskResumerOptions } from "../../src/core/agents/manager/task-resumer";
 import { TaskStore } from "../../src/core/agents/task-store";
 import { AgentRegistry } from "../../src/core/agents/agent-registry";
 import { MemoryLevel, MemoryManager } from "../../src/core/memory/memory-manager";
@@ -7,7 +7,23 @@ import { AGENT_NAMES, TASK_STATUS, TOOL_NAMES, type ParallelTask } from "../../s
 
 vi.mock("../../src/core/agents/logger", () => ({ log: vi.fn() }));
 
-type TaskResumerClient = ConstructorParameters<typeof TaskResumer>[0];
+type TaskResumerClient = TaskResumerOptions["client"];
+
+function resumerFor(
+    client: unknown,
+    store: TaskStore,
+    findBySession: TaskResumerOptions["findBySession"],
+    startTask: TaskResumerOptions["startTask"],
+    hostAgentRouting = false,
+): TaskResumer {
+    return new TaskResumer({
+        client: client as TaskResumerClient,
+        store,
+        findBySession,
+        startTask,
+        hostAgentRouting,
+    });
+}
 
 describe("TaskResumer", () => {
     let store: TaskStore;
@@ -51,8 +67,8 @@ describe("TaskResumer", () => {
         });
 
         const task = createTask({ agent: customAgent });
-        const resumer = new TaskResumer(
-            mockClient as unknown as TaskResumerClient,
+        const resumer = resumerFor(
+            mockClient,
             store,
             (sessionID) => sessionID === task.sessionID ? task : undefined,
             startPolling,
@@ -78,8 +94,8 @@ describe("TaskResumer", () => {
         mockClient.session.status.mockResolvedValue({
             data: { [task.sessionID]: { type: "busy" } },
         });
-        const resumer = new TaskResumer(
-            mockClient as unknown as TaskResumerClient,
+        const resumer = resumerFor(
+            mockClient,
             store,
             (sessionID) => sessionID === task.sessionID ? task : undefined,
             startPolling,
@@ -100,7 +116,7 @@ describe("TaskResumer", () => {
         const task = createTask({ hasStartedOutputting: true, lastMsgCount: 9, pollFailureCount: 2 });
         store.set(task.id, task);
         const begin = vi.fn();
-        const resumer = new TaskResumer(mockClient as unknown as TaskResumerClient, store,
+        const resumer = resumerFor(mockClient, store,
             id => store.getBySession(id), begin);
         const previousStart = task.startedAt;
         await resumer.resume({ sessionId: task.sessionID, prompt: "new work", parentSessionID: "parent-2" });
@@ -129,8 +145,8 @@ describe("TaskResumer", () => {
             return routingGate;
         });
 
-        const resumer = new TaskResumer(
-            mockClient as unknown as TaskResumerClient,
+        const resumer = resumerFor(
+            mockClient,
             store,
             (sessionID) => sessionID === task.sessionID ? task : undefined,
             startPolling,
@@ -160,7 +176,7 @@ describe("TaskResumer", () => {
             if (change === "restarted") task.startedAt = new Date(task.startedAt.getTime() + 1);
             return { data: {} };
         });
-        const resumer = new TaskResumer(mockClient as unknown as TaskResumerClient, store,
+        const resumer = resumerFor(mockClient, store,
             id => store.getBySession(id), startPolling);
 
         await expect(resumer.resume({

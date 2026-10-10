@@ -137,6 +137,7 @@ Current option readers:
 | `contextMaxTokens` | `src/core/context/context-limit-resolver.ts` | Explicit context window for every model, overriding host metadata. |
 | `missionLoop.*` | `src/core/config/plugin-options.ts` | Runtime mission memory and evidence controls. |
 | `messageVisibility` (alias `showInjectedMessages`) | `src/core/session/injection.ts` | How a slash command's expanded prompt reaches the session: `visible` (default) sends it as an ordinary prompt, `synthetic` hides it. The host persists no user message for a slash command, so this delivery is the only record the transcript gets; chat UIs drop `synthetic` messages outright. Loop continuation and recovery injections are always synthetic and ignore this option. |
+| `hostAgentRouting` | `src/core/agents/manager/prompt-routing.ts` | `false` (default) keeps the plugin's own delegation surface: a name the host registered as one of its agents is unknown here, so it falls back to Commander as a Commander clone, without the host's system prompt. `true` sends such a name to that host agent instead. Host agents are listed either way; only the routing decision is gated. Plugin roles from `.opencode/agents.json` and the four built-in roles keep their routing in both modes. |
 
 Concurrency maps and the default accept `0` for unlimited; the generated schema matches that runtime contract. Producerless work-stealing worker loops and `workStealingWorkers` have been removed. The retained admission queue controls actual task launches and resumes.
 

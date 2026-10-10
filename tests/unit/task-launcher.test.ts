@@ -33,6 +33,7 @@ function createTaskLauncher(
     sessionRegistry: any,
     onTaskError: any,
     startPolling: any,
+    hostAgentRouting = false,
 ): TaskLauncher {
     return new TaskLauncher({
         client,
@@ -41,6 +42,7 @@ function createTaskLauncher(
         sessionRegistry,
         onTaskError,
         startPolling,
+        hostAgentRouting,
     });
 }
 

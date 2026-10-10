@@ -66,6 +66,7 @@ describe("concurrency config helpers", () => {
             contextMaxTokens: undefined,
             agentTemperatures: {},
             messageVisibility: "visible",
+            hostAgentRouting: false,
             missionLoop: {
                 ledger: false,
                 markdownMemory: true,

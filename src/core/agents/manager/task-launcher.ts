@@ -35,6 +35,8 @@ interface TaskLauncherOptions {
   sessionRegistry: SessionRegistry;
   onTaskError: (taskId: string, error: unknown) => void | Promise<void>;
   startPolling: () => void;
+  /** Opt-in: send a host agent name to that agent instead of Commander. */
+  hostAgentRouting: boolean;
 }
 
 export class TaskLauncher {
@@ -45,6 +47,7 @@ export class TaskLauncher {
   private readonly sessionRegistry: SessionRegistry;
   private readonly onTaskError: TaskLauncherOptions["onTaskError"];
   private readonly startPolling: () => void;
+  private readonly hostAgentRouting: boolean;
 
   constructor(options: TaskLauncherOptions) {
     this.client = options.client;
@@ -53,6 +56,7 @@ export class TaskLauncher {
     this.sessionRegistry = options.sessionRegistry;
     this.onTaskError = options.onTaskError;
     this.startPolling = options.startPolling;
+    this.hostAgentRouting = options.hostAgentRouting;
   }
 
   /**
@@ -167,7 +171,7 @@ export class TaskLauncher {
       return;
     }
     task.concurrencyKey = task.agent;
-    const routedPrompt = preparedPrompt ?? await buildRoutedAgentPrompt(task.agent, task.prompt);
+    const routedPrompt = preparedPrompt ?? await buildRoutedAgentPrompt(task.agent, task.prompt, this.hostAgentRouting);
     if (!isSameActiveRun(task, startedAt)) return;
     if (preparedPrompt && await isSessionBusy(this.client, task.sessionID)) {
       throw new Error("Resume session became busy before dispatch");

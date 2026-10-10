@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import OrchestratorPlugin from "../../src/index.js";
-import { PATHS, PLUGIN_HOOKS, SESSION_EVENTS } from "../../src/shared/index.js";
+import { ParallelAgentManager } from "../../src/core/agents/index.js";
+import { AGENT_NAMES, PATHS, PLUGIN_HOOKS, SESSION_EVENTS } from "../../src/shared/index.js";
 
 describe("OrchestratorPlugin Entry Point", () => {
     let testDir: string;
@@ -184,5 +185,35 @@ export default { name: 'host-owned', version: '1' };`;
         if (pluginInstance.dispose) {
             await pluginInstance.dispose();
         }
+    });
+
+    it("routes to a host agent only when hostAgentRouting is set in the plugin options", async () => {
+        // The whole chain: plugin options -> plugin runtime -> manager -> launcher
+        // -> the agent the prompt is sent to.
+        async function wireAgentFor(options: Record<string, unknown>) {
+            mockClient.app.agents = vi.fn().mockResolvedValue({
+                data: [{ id: "subagent_entry", description: "Entry host agent", system: "HOST SYSTEM" }],
+            });
+            const pluginInstance = await OrchestratorPlugin.server(
+                { directory: testDir, client: mockClient } as Parameters<typeof OrchestratorPlugin.server>[0],
+                options,
+            );
+            try {
+                await ParallelAgentManager.getInstance().launch({
+                    description: "Entry routing probe",
+                    prompt: "Run the probe",
+                    agent: "subagent_entry",
+                    parentSessionID: "parent-entry",
+                });
+                await vi.waitFor(() => expect(mockClient.session.prompt).toHaveBeenCalled());
+                return mockClient.session.prompt.mock.calls.at(-1)?.[0]?.body.agent;
+            } finally {
+                await pluginInstance.dispose?.();
+            }
+        }
+
+        expect(await wireAgentFor({ hostAgentRouting: true })).toBe("subagent_entry");
+        mockClient.session.prompt.mockClear();
+        expect(await wireAgentFor({})).toBe(AGENT_NAMES.COMMANDER);
     });
 });

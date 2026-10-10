@@ -68,7 +68,7 @@ export class ParallelAgentManager {
     private cleaner: TaskCleaner;
     private eventHandler: EventHandler;
 
-    private constructor(client: OpencodeClient, directory: string, concurrencyConfig?: ConcurrencyConfig) {
+    private constructor(client: OpencodeClient, directory: string, concurrencyConfig?: ConcurrencyConfig, hostAgentRouting = false) {
         this.client = client;
         this.store = new TaskStore(directory);
         this.concurrency = new ConcurrencyController(concurrencyConfig);
@@ -76,16 +76,17 @@ export class ParallelAgentManager {
         this.sessionRegistry = SessionRegistry.getInstance(client, directory);
         this.cleaner = new TaskCleaner(client, this.store, this.concurrency, this.sessionRegistry);
         this.poller = this.createPoller();
-        this.launcher = this.createLauncher();
-        this.resumer = new TaskResumer(
+        this.launcher = this.createLauncher(hostAgentRouting);
+        this.resumer = new TaskResumer({
             client,
-            this.store,
-            (sessionID) => this.findBySession(sessionID),
-            (task, prompt) => {
+            store: this.store,
+            findBySession: (sessionID) => this.findBySession(sessionID),
+            startTask: (task, prompt) => {
                 this.cleaner.cancelCleanup(task.id);
                 this.launcher.startTask(task, prompt);
             },
-        );
+            hostAgentRouting,
+        });
         this.eventHandler = this.createEventHandler();
     }
 
@@ -110,7 +111,7 @@ export class ParallelAgentManager {
         });
     }
 
-    private createLauncher(): TaskLauncher {
+    private createLauncher(hostAgentRouting: boolean): TaskLauncher {
         return new TaskLauncher({
             client: this.client,
             store: this.store,
@@ -118,6 +119,7 @@ export class ParallelAgentManager {
             sessionRegistry: this.sessionRegistry,
             onTaskError: (taskId, error) => this.handleTaskError(taskId, error),
             startPolling: () => this.poller.start(),
+            hostAgentRouting,
         });
     }
 
@@ -133,16 +135,22 @@ export class ParallelAgentManager {
         });
     }
 
+    /**
+     * `hostAgentRouting` opts in to delegating a host agent name to that agent
+     * instead of the Commander fallback; it only reaches the prompt-routing
+     * decision, never the registry, which always lists host agents.
+     */
     static getInstance(
         client?: OpencodeClient,
         directory?: string,
         concurrencyConfig?: ConcurrencyConfig,
+        hostAgentRouting = false,
     ): ParallelAgentManager {
         if (!ParallelAgentManager._instance) {
             if (!client || !directory) {
                 throw new Error("ParallelAgentManager requires client and directory on first call");
             }
-            ParallelAgentManager._instance = new ParallelAgentManager(client, directory, concurrencyConfig);
+            ParallelAgentManager._instance = new ParallelAgentManager(client, directory, concurrencyConfig, hostAgentRouting);
         }
         return ParallelAgentManager._instance;
     }
