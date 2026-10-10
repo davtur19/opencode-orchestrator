@@ -201,6 +201,17 @@ describe("Parallel Tools Suite", () => {
 
             registry.listAgents = originalList;
         });
+
+        it("reports registered host agents", async () => {
+            await AgentRegistry.getInstance().loadHostAgents({
+                app: { agents: async () => ({ data: [{ id: "verifier", description: "Fail-closed verification" }] }) },
+            });
+
+            const result = await (createListAgentsTool() as any).execute();
+
+            expect(result).toContain("**verifier**: Fail-closed verification");
+            expect(result).toContain("Commander");
+        });
     });
 
     describe("show_metrics", () => {

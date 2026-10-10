@@ -15,7 +15,7 @@ export async function buildRoutedAgentPrompt(
   const agentRegistry = AgentRegistry.getInstance();
   await agentRegistry.ready();
 
-  const wireAgent = resolveWireAgent(agent);
+  const wireAgent = resolveWireAgent(agent, agentRegistry);
   const routedPrompt = buildRolePrompt(agent, prompt, wireAgent, agentRegistry);
   const memory = MemoryManager.getInstance().getContext(routedPrompt);
   const text = memory ? `${memory}\n\n${routedPrompt}` : routedPrompt;
@@ -40,7 +40,13 @@ function buildRolePrompt(
   return `### AGENT ROLE: ${agentDef.id}\n${agentDef.description}\n\n${agentDef.systemPrompt}\n\n${prompt}`;
 }
 
-function resolveWireAgent(agent: string): string {
+/**
+ * A name the host runs itself routes to itself. Any other name keeps the
+ * custom-role contract: an unknown or plugin-only agent rides on Commander
+ * carrying its role prompt, so it never runs as a bare Commander clone.
+ */
+function resolveWireAgent(agent: string, agentRegistry: AgentRegistry): string {
+  if (agentRegistry.isHostAgent(agent)) return agent;
   const knownAgents = Object.values(AGENT_NAMES) as string[];
   return knownAgents.includes(agent) ? agent : AGENT_NAMES.COMMANDER;
 }

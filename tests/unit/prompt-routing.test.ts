@@ -31,6 +31,36 @@ describe("buildRoutedAgentPrompt", () => {
         });
     });
 
+    it("routes a host-defined agent to itself without re-injecting its role prompt", async () => {
+        const hostAgent = "subagent_reverse";
+        await AgentRegistry.getInstance().loadHostAgents({
+            app: { agents: async () => ({ data: [{ id: hostAgent, description: "Reverse-engineering subagent", system: "HOST SYSTEM" }] }) },
+        });
+
+        const routed = await buildRoutedAgentPrompt(hostAgent, "Disassemble the loader");
+
+        expect(routed.wireAgent).toBe(hostAgent);
+        expect(routed.text).toBe("Disassemble the loader");
+        expect(routed.text).not.toContain("### AGENT ROLE:");
+        expect(routed.text).not.toContain("HOST SYSTEM");
+        // Not Commander, so it must not inherit the delegation tools.
+        expect(routed.tools).toEqual({
+            [TOOL_NAMES.SKILL]: true,
+            [TOOL_NAMES.RUN_COMMAND]: true,
+        });
+    });
+
+    it("keeps built-in routes unchanged once host agents are loaded", async () => {
+        await AgentRegistry.getInstance().loadHostAgents({
+            app: { agents: async () => ({ data: [{ id: "Worker", system: "HOST WORKER SYSTEM" }] }) },
+        });
+
+        const routed = await buildRoutedAgentPrompt(AGENT_NAMES.WORKER, "Implement the assigned file");
+
+        expect(routed.wireAgent).toBe(AGENT_NAMES.WORKER);
+        expect(routed.text).toBe("Implement the assigned file");
+    });
+
     it("routes custom agents through Commander while preserving the custom role prompt", async () => {
         const customAgent = "CustomPromptRoutingAgent";
         AgentRegistry.getInstance().registerAgent(customAgent, {

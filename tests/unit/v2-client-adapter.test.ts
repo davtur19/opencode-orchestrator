@@ -1,6 +1,7 @@
 import type { Plugin } from "@opencode/plugin";
 import { describe, expect, it, vi } from "vitest";
 import { createV2ClientBridge } from "../../src/v2/client-adapter.js";
+import { AgentRegistry } from "../../src/core/agents/agent-registry.js";
 
 function createHost(messages: unknown[] = []) {
     const session = {
@@ -85,6 +86,46 @@ describe("OpenCode 2 client bridge", () => {
 
         expect(session.switchAgent).toHaveBeenCalledWith({ sessionID: "session-1", agent: "Worker" });
         expect(session.prompt).toHaveBeenCalledWith(expect.objectContaining({ sessionID: "session-1", resume: true }));
+    });
+
+    it("leaves a host agent's own prompt untouched so its system prompt is not duplicated", async () => {
+        const { context, session } = createHost();
+        AgentRegistry._resetForTesting();
+        await AgentRegistry.getInstance().loadHostAgents({
+            app: { agents: async () => ({ data: [{ id: "vision", description: "Vision-only", system: "HOST VISION SYSTEM" }] }) },
+        });
+
+        await createV2ClientBridge(context).client.session.prompt({
+            path: { id: "session-1" },
+            body: { agent: "vision", parts: [{ type: "text", text: "read the screenshot" }] },
+        });
+
+        expect(session.switchAgent).toHaveBeenCalledWith({ sessionID: "session-1", agent: "vision" });
+        expect(session.prompt).toHaveBeenCalledWith(
+            expect.objectContaining({ text: "read the screenshot" }),
+        );
+        expect(session.prompt.mock.calls[0][0].text).not.toContain("HOST VISION SYSTEM");
+        AgentRegistry._resetForTesting();
+    });
+
+    it("exposes host agents through the registry in the legacy envelope the host already uses", async () => {
+        // Regression: the bridge re-wrapped `context.agent.list()`, whose result is
+        // already `{ location, data }`, so the registry saw `{ data: { location, data } }`,
+        // found no array, and every delegation fell back to Commander.
+        const { context } = createHost();
+        const hostAgent = { id: "subagent_reverse", name: "subagent_reverse", description: "Reverse-engineering", system: "HOST RE SYSTEM" };
+        Object.assign(context, {
+            agent: { list: vi.fn().mockResolvedValue({ location: { directory: "/project" }, data: [hostAgent] }) },
+        });
+        AgentRegistry._resetForTesting();
+
+        await AgentRegistry.getInstance().loadHostAgents(createV2ClientBridge(context).client);
+
+        const registry = AgentRegistry.getInstance();
+        expect(registry.listAgents()).toContain("subagent_reverse");
+        expect(registry.isHostAgent("subagent_reverse")).toBe(true);
+        expect(registry.getAgent("subagent_reverse")?.systemPrompt).toBe("HOST RE SYSTEM");
+        AgentRegistry._resetForTesting();
     });
 
     it("does not report session interruption as deletion on hosts without session.remove", async () => {

@@ -92,7 +92,9 @@ export class ParallelAgentManager {
         const memory = MemoryManager.getInstance();
         memory.add(MemoryLevel.SYSTEM, CORE_PHILOSOPHY, 1.0);
         memory.add(MemoryLevel.PROJECT, `Working directory: ${directory}`, 0.9);
-        AgentRegistry.getInstance().setDirectory(directory);
+        const agentRegistry = AgentRegistry.getInstance();
+        agentRegistry.setDirectory(directory);
+        agentRegistry.loadHostAgents(this.client);
         TodoManager.getInstance().setDirectory(directory);
     }
 

@@ -20,7 +20,10 @@ export function createV2ClientBridge(context: Context): V2ClientBridge {
     const client = {
         session,
         tui: { showToast: async () => ({}) },
-        app: { agents: async () => ({ data: await context.agent.list() }) },
+        // `context.agent.list()` already answers with the `{ location, data }`
+        // envelope; re-wrapping it here produced `{ data: { location, data } }`,
+        // which reads back as "the host has no agents".
+        app: { agents: async () => ({ data: (await context.agent.list()).data }) },
     };
     return { client: client as unknown as LegacyClient, statuses };
 }
@@ -74,6 +77,9 @@ async function addAgentRole(text: string, agent: string | undefined): Promise<st
     if (!agent) return text;
     const registry = AgentRegistry.getInstance();
     await registry.ready();
+    // The host already applied this agent's own system prompt; re-injecting it
+    // here would duplicate it inside the user turn.
+    if (registry.isHostAgent(agent)) return text;
     const definition = registry.getAgent(agent);
     if (!definition) return text;
     return `### AGENT ROLE: ${definition.id}\n${definition.description}\n\n${definition.systemPrompt}\n\n${text}`;
