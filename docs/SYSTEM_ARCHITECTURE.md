@@ -136,6 +136,7 @@ Current option readers:
 | `agentTemperatures` | `src/plugin-handlers/chat-params-handler.ts`, `src/v2/setup.ts` | Per-agent temperature, applied when the model supports it. |
 | `contextMaxTokens` | `src/core/context/context-limit-resolver.ts` | Explicit context window for every model, overriding host metadata. |
 | `missionLoop.*` | `src/core/config/plugin-options.ts` | Runtime mission memory and evidence controls. |
+| `messageVisibility` (alias `showInjectedMessages`) | `src/core/session/injection.ts` | How a slash command's expanded prompt reaches the session: `visible` (default) sends it as an ordinary prompt, `synthetic` hides it. The host persists no user message for a slash command, so this delivery is the only record the transcript gets; chat UIs drop `synthetic` messages outright. Loop continuation and recovery injections are always synthetic and ignore this option. |
 
 Concurrency maps and the default accept `0` for unlimited; the generated schema matches that runtime contract. Producerless work-stealing worker loops and `workStealingWorkers` have been removed. The retained admission queue controls actual task launches and resumes.
 

@@ -84,23 +84,73 @@ describe("OpenCode 2 plugin setup", () => {
         expect(registrations.every(item => item.dispose.mock.calls.length === 1)).toBe(true);
     });
 
-    it("runs task as a synthetic instruction instead of a visible user prompt", async () => {
+    /**
+     * Register the plugin's V2 commands against a stub context and return the
+     * registered `task` command together with the session spies.
+     */
+    async function registerTaskCommand(options?: Record<string, unknown>) {
         const directory = mkdtempSync(path.join(tmpdir(), "oco-v2-command-"));
         directories.push(directory);
         const commands: Array<{ name: string; execute: (input: unknown) => Promise<void> }> = [];
         const context = {
-            session: { prompt: vi.fn(), synthetic: vi.fn().mockResolvedValue(undefined) },
+            options: options ?? {},
+            session: { prompt: vi.fn().mockResolvedValue(undefined), synthetic: vi.fn().mockResolvedValue(undefined) },
             command: { transform: vi.fn(async (edit: (editor: { add: (command: typeof commands[number]) => void }) => void) => {
                 edit({ add: command => commands.push(command) });
                 return { dispose: vi.fn() };
             }) },
         } as unknown as Plugin.Context;
         const { registerV2Commands } = await import("../../src/v2/command-adapter.js");
+        const { parseOrchestratorPluginOptions } = await import("../../src/core/config/plugin-options.js");
         const handlerContext = { directory, sessions: new Map() } as unknown as Parameters<typeof registerV2Commands>[1];
-        await registerV2Commands(context, handlerContext);
-        await commands.find(command => command.name === "task")?.execute({ sessionID: "s1", prompt: { text: "do work" } });
+        await registerV2Commands(context, handlerContext, parseOrchestratorPluginOptions(options as never).messageVisibility);
+        return { context, task: commands.find(command => command.name === "task")! };
+    }
+
+    // Regression: the host never persists a user message for a slash command
+    // (packages/core/src/session/command.ts on the OC2 host), so the only record
+    // of what the user typed is what this adapter sends. Sent as `synthetic` it
+    // is a message with role `synthetic`, which openchamber drops outright
+    // (packages/ui/src/components/chat/lib/timelineRoles.ts SKIPPED_ROLES), and
+    // `/task <text>` renders as nothing at all.
+    it("delivers task as a visible user prompt by default", async () => {
+        const { context, task } = await registerTaskCommand();
+        await task.execute({ sessionID: "s1", prompt: { text: "do work" } });
+        expect(context.session.prompt).toHaveBeenCalledWith(expect.objectContaining({ sessionID: "s1", text: expect.stringContaining("do work") }));
+        expect(context.session.synthetic).not.toHaveBeenCalled();
+    });
+
+    it("keeps the legacy hidden delivery when messageVisibility is synthetic", async () => {
+        const { context, task } = await registerTaskCommand({ messageVisibility: "synthetic" });
+        await task.execute({ sessionID: "s1", prompt: { text: "do work" } });
         expect(context.session.synthetic).toHaveBeenCalledWith(expect.objectContaining({ sessionID: "s1" }));
         expect(context.session.prompt).not.toHaveBeenCalled();
+    });
+
+    it("maps the showInjectedMessages boolean alias onto messageVisibility", async () => {
+        const hidden = await registerTaskCommand({ showInjectedMessages: false });
+        await hidden.task.execute({ sessionID: "s1", prompt: { text: "do work" } });
+        expect(hidden.context.session.synthetic).toHaveBeenCalled();
+        expect(hidden.context.session.prompt).not.toHaveBeenCalled();
+
+        const shown = await registerTaskCommand({ showInjectedMessages: true });
+        await shown.task.execute({ sessionID: "s1", prompt: { text: "do work" } });
+        expect(shown.context.session.prompt).toHaveBeenCalled();
+        expect(shown.context.session.synthetic).not.toHaveBeenCalled();
+    });
+
+    it("falls back to the visible default for an unknown messageVisibility value", async () => {
+        const { context, task } = await registerTaskCommand({ messageVisibility: "elsewhere" });
+        await task.execute({ sessionID: "s1", prompt: { text: "do work" } });
+        expect(context.session.prompt).toHaveBeenCalled();
+        expect(context.session.synthetic).not.toHaveBeenCalled();
+    });
+
+    it("leaves stop and cancel without any prompt", async () => {
+        const { context, task } = await registerTaskCommand();
+        await task.execute({ sessionID: "s1", prompt: { text: "do work" } });
+        expect(context.session.prompt).toHaveBeenCalledTimes(1);
+        expect(context.session.synthetic).not.toHaveBeenCalled();
     });
 
     it("replaces an active V2 mission after interrupting its owner", async () => {
@@ -108,6 +158,7 @@ describe("OpenCode 2 plugin setup", () => {
         directories.push(directory);
         const commands: Array<{ name: string; execute: (input: unknown) => Promise<void> }> = [];
         const session = {
+            prompt: vi.fn().mockResolvedValue(undefined),
             synthetic: vi.fn().mockResolvedValue(undefined),
             interrupt: vi.fn().mockResolvedValue({ interrupted: true }),
         };
@@ -126,13 +177,13 @@ describe("OpenCode 2 plugin setup", () => {
             cancelTasksForParent: vi.fn().mockResolvedValue(true),
         } as never);
         try {
-            await registerV2Commands(context, { client: bridge.client, directory, sessions: new Map() } as never);
+            await registerV2Commands(context, { client: bridge.client, directory, sessions: new Map() } as never, "visible");
             const task = commands.find(command => command.name === "task")!;
             await task.execute({ sessionID: "old-root", prompt: { text: "Old mission" } });
             bridge.statuses.set("old-root", "busy");
             await task.execute({ sessionID: "new-root", prompt: { text: "New mission" } });
             expect(session.interrupt).toHaveBeenCalledWith({ sessionID: "old-root", resume: false });
-            expect(session.synthetic).toHaveBeenLastCalledWith(expect.objectContaining({ sessionID: "new-root" }));
+            expect(session.prompt).toHaveBeenLastCalledWith(expect.objectContaining({ sessionID: "new-root" }));
         } finally {
             manager.mockRestore();
         }

@@ -110,6 +110,16 @@
         "maxEvidenceEvents"
       ],
       "additionalProperties": false
+    },
+    "messageVisibility": {
+      "type": "string",
+      "enum": [
+        "synthetic",
+        "visible"
+      ]
+    },
+    "showInjectedMessages": {
+      "type": "boolean"
     }
   },
   "additionalProperties": {}

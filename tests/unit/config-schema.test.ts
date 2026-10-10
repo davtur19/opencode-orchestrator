@@ -5,6 +5,7 @@ import {
     orchestratorOptionsJsonSchema,
     OrchestratorOptionsSchema,
     parseMissionLoopOptions,
+    parseMessageVisibility,
 } from "../../src/core/config/options-schema.js";
 import { DEFAULT_MISSION_RUNTIME_OPTIONS } from "../../src/core/loop/mission-runtime-options.js";
 
@@ -50,6 +51,26 @@ describe("plugin options schema (Phase G)", () => {
                 ledger: false,
                 maxEvidenceEvents: 50,
             });
+        });
+    });
+
+    describe("tolerant messageVisibility parsing", () => {
+        it("defaults to visible when absent or unusable", () => {
+            expect(parseMessageVisibility(undefined)).toBe("visible");
+            expect(parseMessageVisibility("nope")).toBe("visible");
+            expect(parseMessageVisibility({})).toBe("visible");
+            expect(parseMessageVisibility({ messageVisibility: "elsewhere" })).toBe("visible");
+        });
+
+        it("honours an explicit value", () => {
+            expect(parseMessageVisibility({ messageVisibility: "synthetic" })).toBe("synthetic");
+            expect(parseMessageVisibility({ messageVisibility: "visible" })).toBe("visible");
+        });
+
+        it("maps the showInjectedMessages alias, but not over a valid value", () => {
+            expect(parseMessageVisibility({ showInjectedMessages: false })).toBe("synthetic");
+            expect(parseMessageVisibility({ showInjectedMessages: true })).toBe("visible");
+            expect(parseMessageVisibility({ showInjectedMessages: true, messageVisibility: "synthetic" })).toBe("synthetic");
         });
     });
 

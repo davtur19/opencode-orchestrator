@@ -11,6 +11,8 @@
  */
 import { z } from "zod";
 import { DEFAULT_MISSION_RUNTIME_OPTIONS } from "../loop/mission-runtime-options.js";
+import { DEFAULT_MESSAGE_VISIBILITY, type MessageVisibility } from "../session/injection.js";
+import { isRecord } from "../../shared/core/guards.js";
 
 const D = DEFAULT_MISSION_RUNTIME_OPTIONS;
 
@@ -49,6 +51,15 @@ export const OrchestratorOptionsSchema = z
          */
         contextMaxTokens: z.number().int().positive().optional(),
         missionLoop: MissionLoopOptionsSchema.optional(),
+        /**
+         * How a slash command's expanded prompt reaches the session.
+         * `visible` (the default) sends it as an ordinary prompt; `synthetic`
+         * hides it. Loop continuation and recovery injections are always
+         * synthetic and ignore this option.
+         */
+        messageVisibility: z.enum(["synthetic", "visible"]).optional(),
+        /** Legacy boolean alias for messageVisibility: true -> visible, false -> synthetic. Ignored when messageVisibility is valid. */
+        showInjectedMessages: z.boolean().optional(),
     })
     .passthrough();
 
@@ -56,6 +67,21 @@ export const OrchestratorOptionsSchema = z
 export function parseContextMaxTokens(value: unknown): number | undefined {
     const parsed = z.number().int().positive().safeParse(value);
     return parsed.success ? parsed.data : undefined;
+}
+
+/**
+ * Tolerant resolution of the `messageVisibility` option: absent or invalid means
+ * the default. `showInjectedMessages` is the boolean alias (true -> visible,
+ * false -> synthetic); a valid explicit `messageVisibility` wins.
+ */
+export function parseMessageVisibility(value: unknown): MessageVisibility {
+    const source = isRecord(value) ? value : {};
+    const explicit = z.enum(["synthetic", "visible"]).safeParse(source.messageVisibility);
+    if (explicit.success) return explicit.data;
+    if (typeof source.showInjectedMessages === "boolean") {
+        return source.showInjectedMessages ? "visible" : "synthetic";
+    }
+    return DEFAULT_MESSAGE_VISIBILITY;
 }
 
 export function parseAgentTemperatures(value: unknown): Record<string, number> {

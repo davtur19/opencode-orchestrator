@@ -14,6 +14,7 @@ import { registerV2Commands } from "./command-adapter.js";
 import { registerV2Agents } from "./agent-adapter.js";
 import { ContextLimitResolver } from "../core/context/context-limit-resolver.js";
 import { parseAgentTemperatures } from "../core/config/options-schema.js";
+import { parseOrchestratorPluginOptions } from "../core/config/plugin-options.js";
 import { isRecord } from "../shared/core/guards.js";
 
 type Context = Plugin.Context;
@@ -36,7 +37,11 @@ export async function setupV2(contextInput: unknown): Promise<() => Promise<void
             context,
             registerAllTools(runtime.directory, runtime.asyncAgentTools),
         ));
-        registrations.push(await registerV2Commands(context, handlerContext));
+        registrations.push(await registerV2Commands(
+            context,
+            handlerContext,
+            parseOrchestratorPluginOptions(context.options).messageVisibility,
+        ));
         stopEvents = startV2EventBridge(
             context,
             createEventHandler(handlerContext),

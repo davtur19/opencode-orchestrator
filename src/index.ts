@@ -41,7 +41,10 @@ const OrchestratorServerPlugin: Plugin = async (input, options) => {
         config: createConfigHandler(),
         event: createEventHandler(handlerContext),
         [PLUGIN_HOOKS.CHAT_MESSAGE]: createChatMessageHandler(handlerContext),
-        "command.execute.before": createCommandExecuteBeforeHandler(handlerContext),
+        "command.execute.before": createCommandExecuteBeforeHandler(
+            handlerContext,
+            parseOrchestratorPluginOptions(options).messageVisibility,
+        ),
         [PLUGIN_HOOKS.CHAT_PARAMS]: createChatParamsHandler(parseOrchestratorPluginOptions(options).agentTemperatures),
         [PLUGIN_HOOKS.TOOL_EXECUTE_BEFORE]: createToolExecuteBeforeHandler(handlerContext),
         [PLUGIN_HOOKS.TOOL_EXECUTE_AFTER]: createToolExecuteAfterHandler(handlerContext),

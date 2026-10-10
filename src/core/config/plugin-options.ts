@@ -4,8 +4,9 @@ import { extractConcurrencyConfig } from "../agents/concurrency-config.js";
 import {
     type MissionRuntimeOptions,
 } from "../loop/mission-runtime-options.js";
-import { parseAgentTemperatures, parseContextMaxTokens, parseMissionLoopOptions } from "./options-schema.js";
+import { parseAgentTemperatures, parseContextMaxTokens, parseMessageVisibility, parseMissionLoopOptions } from "./options-schema.js";
 import { isRecord } from "../../shared/core/guards.js";
+import type { MessageVisibility } from "../session/injection.js";
 
 type MissionLoopPluginOptions = MissionRuntimeOptions;
 
@@ -15,6 +16,7 @@ interface OrchestratorPluginOptions {
     /** Explicit context window override; undefined resolves from model metadata. */
     contextMaxTokens?: number;
     agentTemperatures: Record<string, number>;
+    messageVisibility: MessageVisibility;
 }
 
 export function parseOrchestratorPluginOptions(options?: PluginOptions): OrchestratorPluginOptions {
@@ -24,6 +26,7 @@ export function parseOrchestratorPluginOptions(options?: PluginOptions): Orchest
         missionLoop: readMissionLoopOptions(source.missionLoop),
         contextMaxTokens: parseContextMaxTokens(source.contextMaxTokens),
         agentTemperatures: parseAgentTemperatures(source.agentTemperatures),
+        messageVisibility: parseMessageVisibility(source),
     };
 }
 

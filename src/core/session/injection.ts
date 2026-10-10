@@ -18,6 +18,15 @@
  * anomaly prompts: the LLM keeps reading them, the user stops seeing them
  * masquerading as their own input.
  *
+ * That hiding is wrong for the one prompt that replaces something the user
+ * typed: a slash command. The host persists no user message for a slash
+ * command at all (`SessionCommand.execute` on the OC2 host only runs the
+ * command), so a command sent `synthetic` leaves the transcript with no trace
+ * of the request, and chat UIs drop `synthetic` messages outright (openchamber
+ * skips that role in `timelineRoles.ts`). The `messageVisibility` plugin option
+ * therefore decides how a slash command is delivered; `"synthetic"` restores
+ * the hiding described above.
+ *
  * Delegation prompts sent to a freshly created *subagent* session are
  * deliberately NOT synthetic: they are that session's real opening instruction,
  * and OpenCode derives the session title from the first non-synthetic user
@@ -25,6 +34,18 @@
  */
 
 import { PART_TYPES } from "../../shared/index.js";
+
+/**
+ * How the plugin delivers the prompt a slash command expands to.
+ *
+ * - `"synthetic"` — the legacy behavior documented above: hidden in the TUI.
+ * - `"visible"` — an ordinary prompt, so the user sees what they asked for in
+ *   every client. The default, because the command path is the only place the
+ *   plugin replaces input the user actually typed.
+ */
+export type MessageVisibility = "synthetic" | "visible";
+
+export const DEFAULT_MESSAGE_VISIBILITY: MessageVisibility = "visible";
 
 /** A text part accepted by `client.session.prompt`. */
 interface SyntheticTextPart {
